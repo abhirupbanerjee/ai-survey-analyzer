@@ -1,23 +1,19 @@
 "use client";
 
-// Import necessary libraries and modules
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import { motion } from "framer-motion";
 import remarkGfm from "remark-gfm";
+import Image from "next/image";
 
-
-// Define Message type
 interface Message {
   role: string;
   content: string;
   timestamp?: string;
 }
 
-// Main ChatApp component
 const ChatApp = () => {
-  // Define States
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -26,7 +22,6 @@ const ChatApp = () => {
   const [typing, setTyping] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom when messages change
   useEffect(() => {
     chatContainerRef.current?.scrollTo({
       top: chatContainerRef.current.scrollHeight,
@@ -34,13 +29,11 @@ const ChatApp = () => {
     });
   }, [messages]);
 
-  // Save chat history and thread ID in localStorage
   useEffect(() => {
     localStorage.setItem("chatHistory", JSON.stringify(messages));
     if (threadId) localStorage.setItem("threadId", threadId);
   }, [messages, threadId]);
   
-  // Load chat history and thread ID from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem("chatHistory");
     const savedThread = localStorage.getItem("threadId");
@@ -48,14 +41,12 @@ const ChatApp = () => {
     if (savedThread) setThreadId(savedThread);
   }, []);
 
-
-
-  // Function to send user message and receive assistant response
-const sendMessage = async () => {
+  const sendMessage = async () => {
   if (activeRun || !input.trim()) return;
 
   setActiveRun(true);
   setLoading(true);
+  setTyping(true);
 
   const userMessage = {
     role: "user",
@@ -82,13 +73,22 @@ const sendMessage = async () => {
       ...prev,
       { role: "assistant", content: res.data.reply, timestamp: new Date().toLocaleString() },
     ]);
-  } catch (err: any) {
-    console.error("Error:", err.response?.data || err.message);
+  } catch (err: unknown) {
+    const error = err as {
+      response?: {
+        data?: {
+          error?: string;
+        };
+      };
+      message?: string;
+    };
+    
+    console.error("Error:", error.response?.data || error.message);
     setMessages((prev) => [
       ...prev,
       {
         role: "assistant",
-        content: `Error: ${err.response?.data?.error || err.message || "Unable to reach assistant."}`,
+        content: `Error: ${error.response?.data?.error || error.message || "Unable to reach assistant."}`,
         timestamp: new Date().toLocaleString(),
       },
     ]);
@@ -99,10 +99,9 @@ const sendMessage = async () => {
   }
 };
 
-  // Copy chat to clipboard
   const copyChatToClipboard = async () => {
     const chatText = messages
-      .map((msg) => `${msg.timestamp} - ${msg.role === "user" ? "You" : "AI Survey Assistant"}:\n${msg.content}`)
+      .map((msg) => `${msg.timestamp} - ${msg.role === "user" ? "You" : " AI Survey Assistant"}:\n${msg.content}`)
       .join("\n\n");
     try {
       await navigator.clipboard.writeText(chatText);
@@ -114,13 +113,11 @@ const sendMessage = async () => {
 
   return (
     <div className="h-screen w-full flex flex-col bg-white">
-      {/* Header */}
       <header className="flex items-center justify-center w-full p-4 bg-white shadow-md">
-        <img src="/icon.png" alt="Icon" className="h-12 w-12 sm:h-16 sm:w-16" />
+        <Image src="/icon.png" alt="Icon" width={64} height={64} className="h-12 w-12 sm:h-16 sm:w-16" />
         <h2 className="text-xl sm:text-2xl font-bold ml-2"> AI Survey Assistant</h2>
       </header>
 
-      {/* Chat Container */}
       <div className="flex-grow w-full max-w-4xl mx-auto flex flex-col p-4">
         <div
           ref={chatContainerRef}
@@ -156,25 +153,25 @@ const sendMessage = async () => {
                     code: ({ ...props }) => (
                       <code style={{ fontFamily: "'Segoe UI', sans-serif", background: "#f3f4f6", padding: "0.2rem 0.4rem", borderRadius: "4px" }} {...props} />
                     ),
-                    p: ({ node, ...props }) => (
+                    p: ({ ...props }) => (
                       <p style={{ marginBottom: "0.75rem", lineHeight: "1.6", fontFamily: "'Segoe UI', sans-serif", fontSize: "16px" }} {...props} />
                     ),
-                    ul: ({ node, ...props }) => (
+                    ul: ({ ...props }) => (
                       <ul style={{ listStyleType: "disc", paddingLeft: "1.5rem", marginBottom: "1rem" }} {...props} />
                     ),
-                    ol: ({ node, ...props }) => (
+                    ol: ({ ...props }) => (
                       <ol style={{ listStyleType: "decimal", paddingLeft: "1.5rem", marginBottom: "1rem" }} {...props} />
                     ),
-                    li: ({ node, ...props }) => (
+                    li: ({ ...props }) => (
                       <li style={{ marginBottom: "0.4rem" }} {...props} />
                     ),
-                    table: ({ node, ...props }) => (
+                    table: ({ ...props }) => (
                       <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: "1rem" }} {...props} />
                     ),
-                    th: ({ node, ...props }) => (
+                    th: ({ ...props }) => (
                       <th style={{ border: "1px solid #ccc", background: "#f3f4f6", padding: "8px", textAlign: "left" }} {...props} />
                     ),
-                    td: ({ node, ...props }) => (
+                    td: ({ ...props }) => (
                       <td style={{ border: "1px solid #ccc", padding: "8px", textAlign: "left" }} {...props} />
                     ),
                   }}
@@ -184,14 +181,12 @@ const sendMessage = async () => {
               </div>
             </motion.div>
           ))}
-          {/* Typing Indicator */}
           {typing && (
             <div className="text-gray-500 italic text-center p-2">Assistant is typing...</div>
           )}
         </div>
       </div>
 
-      {/* Input & Controls */}
       <div className="w-full max-w-4xl mx-auto p-4 flex flex-col gap-2">
         <div className="flex flex-col sm:flex-row items-center gap-2">
           <input
