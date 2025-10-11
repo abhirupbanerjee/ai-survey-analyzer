@@ -257,7 +257,7 @@ const ChatApp = () => {
                   This survey was conducted to capture the voices of Caribbean public and private sector leaders on artificial intelligence. Too often, global surveys overlook or dilute Caribbean perspectives.
                 </p>
                 <p className="mb-3">
-                  This initiative aims to change that — making sure our region's priorities, concerns, and aspirations are heard. The insights here represent what could become the landmark survey on AI for Caribbean leaders.
+                  This initiative aims to change that — making sure our priorities, concerns, and aspirations are heard. The insights here represent what could become the landmark survey on AI for Caribbean leaders.
                 </p>
                 <p className="font-semibold text-gray-700 mb-4">Explore the findings below:</p>
               </div>
