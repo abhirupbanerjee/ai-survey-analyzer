@@ -101,33 +101,20 @@ const ChatApp = () => {
   // Strip markdown syntax for clean speech
   const stripMarkdown = (text: string): string => {
     return text
-      // Remove headers (### Header)
       .replace(/^#{1,6}\s+/gm, '')
-      // Remove bold (**text** or __text__)
       .replace(/\*\*(.+?)\*\*/g, '$1')
       .replace(/__(.+?)__/g, '$1')
-      // Remove italic (*text* or _text_)
       .replace(/\*(.+?)\*/g, '$1')
       .replace(/_(.+?)_/g, '$1')
-      // Remove strikethrough (~~text~~)
       .replace(/~~(.+?)~~/g, '$1')
-      // Remove code blocks (```code```)
       .replace(/```[\s\S]*?```/g, 'code block')
-      // Remove inline code (`code`)
       .replace(/`(.+?)`/g, '$1')
-      // Remove links [text](url)
       .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-      // Remove images ![alt](url)
       .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '$1')
-      // Remove bullet points
       .replace(/^\s*[-*+]\s+/gm, '')
-      // Remove numbered lists
       .replace(/^\s*\d+\.\s+/gm, '')
-      // Remove horizontal rules
       .replace(/^[\s]*[-*_]{3,}[\s]*$/gm, '')
-      // Remove blockquotes
       .replace(/^>\s+/gm, '')
-      // Clean up extra whitespace
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   };
@@ -135,7 +122,6 @@ const ChatApp = () => {
   // Text-to-Speech Function
   const speakText = (text: string) => {
     if ("speechSynthesis" in window) {
-      // Cancel any ongoing speech
       window.speechSynthesis.cancel();
       
       const cleanText = stripMarkdown(text);
@@ -153,7 +139,6 @@ const ChatApp = () => {
     }
   };
 
-  // Stop speech function
   const stopSpeaking = () => {
     if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -164,7 +149,6 @@ const ChatApp = () => {
   const sendMessage = async () => {
     if (activeRun || !input.trim()) return;
 
-    // Stop any ongoing speech when sending new message
     stopSpeaking();
 
     setActiveRun(true);
@@ -200,7 +184,6 @@ const ChatApp = () => {
 
       setMessages((prev) => [...prev, assistantMessage]);
 
-      // Auto-speak if voice is enabled
       if (voiceEnabled) {
         speakText(res.data.reply);
       }
@@ -237,17 +220,80 @@ const ChatApp = () => {
   return (
     <div className="h-screen w-full flex flex-col bg-white">
       {/* Header */}
-      <header className="flex items-center justify-center w-full p-4 bg-white shadow-md">
-        <img src="/icon.png" alt="Icon" className="h-12 w-12 sm:h-16 sm:w-16" />
-        <h2 className="text-xl sm:text-2xl font-bold ml-2">Caribbean AI Survey Assistant</h2>
+      <header className="relative flex items-center justify-center w-full p-3 sm:p-4 bg-white shadow-md">
+        <div className="flex items-center">
+          <img src="/icon.png" alt="Icon" className="h-10 w-10 sm:h-16 sm:w-16" />
+          <h2 className="text-sm sm:text-2xl font-bold ml-2">Caribbean AI Survey Assistant</h2>
+        </div>
+        {/* Sign out button - Icon on mobile, text on desktop */}
+        <button
+          onClick={() => window.location.href = '/api/auth/signout'}
+          className="absolute right-3 sm:right-4 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          title="Sign out"
+        >
+          <span className="sm:hidden">
+            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </span>
+          <span className="hidden sm:inline text-gray-700 font-medium">Sign out</span>
+        </button>
       </header>
 
       {/* Chat Container */}
-      <div className="flex-grow w-full max-w-4xl mx-auto flex flex-col p-4">
+      <div className="flex-grow w-full max-w-4xl mx-auto flex flex-col p-3 sm:p-4">
         <div
           ref={chatContainerRef}
           className="flex-grow overflow-y-auto border p-3 space-y-4 bg-white shadow rounded-lg h-[65vh] sm:h-[70vh]"
         >
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-center px-4">
+              <div className="text-4xl sm:text-6xl mb-4">🌴</div>
+              <h3 className="text-lg sm:text-2xl font-bold mb-3 text-gray-800">
+                Welcome to the Caribbean AI Survey Assistant
+              </h3>
+              <div className="text-xs sm:text-sm text-gray-600 mb-6 max-w-2xl leading-relaxed">
+                <p className="mb-3">
+                  This survey was conducted to capture the voices of Caribbean public and private sector leaders on artificial intelligence. Too often, global surveys overlook or dilute Caribbean perspectives.
+                </p>
+                <p className="mb-3">
+                  This initiative aims to change that — making sure our region's priorities, concerns, and aspirations are heard. The insights here represent what could become the landmark survey on AI for Caribbean leaders.
+                </p>
+                <p className="font-semibold text-gray-700 mb-4">Explore the findings below:</p>
+              </div>
+              
+              <h4 className="text-sm sm:text-base font-semibold text-gray-700 mb-3">Suggested Prompts</h4>
+              <div className="flex flex-col gap-3 w-full max-w-2xl">
+                <button
+                  onClick={() => setInput("What are the top survey findings overall?")}
+                  className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
+                >
+                  <div className="font-semibold mb-1">📊 What are the top survey findings overall?</div>
+                  <div className="text-gray-600 text-xs">
+                    See the most important themes and priorities emerging across all leaders.
+                  </div>
+                </button>
+                <button
+                  onClick={() => setInput("What are the biggest risks and concerns leaders see with AI?")}
+                  className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
+                >
+                  <div className="font-semibold mb-1">⚠️ What are the biggest risks and concerns leaders see with AI?</div>
+                  <div className="text-gray-600 text-xs">
+                    Understand the challenges, risks, and areas of caution highlighted in the survey.
+                  </div>
+                </button>
+                <button
+                  onClick={() => setInput("How do views differ by sector, country, or leadership role (CEO, CHRO, CTO, etc.)?")}
+                  className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
+                >
+                  <div className="font-semibold mb-1">🌍 How do views differ by sector, country, or leadership role?</div>
+                  <div className="text-gray-600 text-xs">
+                    Explore differences in perspectives across industries, regions, and leadership positions.
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
           {messages.map((msg, index) => (
             <motion.div key={index}>
               <p className="font-bold mb-1">
@@ -322,7 +368,7 @@ const ChatApp = () => {
         </div>
       </div>
 
-      {/* Stop Speaking Button (appears when speaking) */}
+      {/* Stop Speaking Button */}
       {isSpeaking && (
         <div className="w-full max-w-4xl mx-auto px-4">
           <button
@@ -370,7 +416,7 @@ const ChatApp = () => {
         {/* Action Buttons Row */}
         <div className="flex gap-2">
           <button
-            className={`flex-1 p-3 rounded-lg transition-all ${
+            className={`flex-1 p-3 rounded-lg transition-all text-sm sm:text-base ${
               voiceEnabled 
                 ? "bg-white border-2 border-green-500 text-green-600 font-medium" 
                 : "bg-gray-100 hover:bg-gray-200 text-gray-600"
@@ -378,17 +424,19 @@ const ChatApp = () => {
             onClick={() => setVoiceEnabled(!voiceEnabled)}
             title="Toggle auto-play voice responses"
           >
-            {voiceEnabled ? "🔊 Voice" : "🔇 Voice"}
+            <span className="hidden sm:inline">{voiceEnabled ? "🔊 Voice" : "🔇 Voice"}</span>
+            <span className="sm:hidden text-xl">{voiceEnabled ? "🔊" : "🔇"}</span>
           </button>
           <button
-            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 p-3 rounded-lg transition-colors"
+            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 p-3 rounded-lg transition-colors text-sm sm:text-base"
             onClick={copyChatToClipboard}
             title="Copy chat to clipboard"
           >
-            📋 Copy
+            <span className="hidden sm:inline">📋 Copy</span>
+            <span className="sm:hidden text-xl">📋</span>
           </button>
           <button
-            className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 p-3 rounded-lg transition-colors"
+            className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 p-3 rounded-lg transition-colors text-sm sm:text-base"
             onClick={() => {
               setMessages([]);
               setThreadId(null);
@@ -396,7 +444,8 @@ const ChatApp = () => {
             }}
             title="Clear chat history"
           >
-            🗑️ Clear
+            <span className="hidden sm:inline">🗑️ Clear</span>
+            <span className="sm:hidden text-xl">🗑️</span>
           </button>
         </div>
       </div>
