@@ -20,8 +20,10 @@ const ChatApp = () => {
   const [loading, setLoading] = useState(false);
   const [activeRun, setActiveRun] = useState(false);
   const [typing, setTyping] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false); // NEW: Prevent race condition
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // Scroll to bottom when messages change
   useEffect(() => {
     chatContainerRef.current?.scrollTo({
       top: chatContainerRef.current.scrollHeight,
@@ -29,79 +31,113 @@ const ChatApp = () => {
     });
   }, [messages]);
 
+  // LOAD from localStorage - runs ONCE on mount
   useEffect(() => {
-    localStorage.setItem("chatHistory", JSON.stringify(messages));
-    if (threadId) localStorage.setItem("threadId", threadId);
-  }, [messages, threadId]);
-  
+    if (isLoaded) return; // Prevent re-running
+    
+    try {
+      const saved = localStorage.getItem("chatHistory");
+      const savedThread = localStorage.getItem("threadId");
+      
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        console.log("✅ Loaded messages:", parsed.length); // Debug
+        setMessages(parsed);
+      } else {
+        console.log("ℹ️ No saved messages found");
+      }
+      
+      if (savedThread) {
+        console.log("✅ Loaded threadId:", savedThread); // Debug
+        setThreadId(savedThread);
+      } else {
+        console.log("ℹ️ No saved thread found");
+      }
+    } catch (error) {
+      console.error("❌ Error loading saved data:", error);
+    }
+    
+    setIsLoaded(true);
+  }, []); // Empty deps - runs once
+
+  // SAVE to localStorage - runs AFTER initial load
   useEffect(() => {
-    const saved = localStorage.getItem("chatHistory");
-    const savedThread = localStorage.getItem("threadId");
-    if (saved) setMessages(JSON.parse(saved));
-    if (savedThread) setThreadId(savedThread);
-  }, []);
+    if (!isLoaded) return; // Don't save during initial load
+    
+    try {
+      localStorage.setItem("chatHistory", JSON.stringify(messages));
+      console.log("💾 Saved messages:", messages.length); // Debug
+      
+      if (threadId) {
+        localStorage.setItem("threadId", threadId);
+        console.log("💾 Saved threadId:", threadId); // Debug
+      }
+    } catch (error) {
+      console.error("❌ Error saving data:", error);
+    }
+  }, [messages, threadId, isLoaded]);
 
   const sendMessage = async () => {
-  if (activeRun || !input.trim()) return;
+    if (activeRun || !input.trim()) return;
 
-  setActiveRun(true);
-  setLoading(true);
-  setTyping(true);
+    setActiveRun(true);
+    setLoading(true);
+    setTyping(true);
 
-  const userMessage = {
-    role: "user",
-    content: input,
-    timestamp: new Date().toLocaleString(),
-  };
-  setMessages((prev) => [...prev, userMessage]);
-  const userInput = input;
-  setInput("");
-
-  try {
-    const res = await axios.post("/api/chat", {
-      input: userInput,
-      threadId,
-    });
-
-    if (res.data.error) {
-      throw new Error(res.data.error);
-    }
-
-    setThreadId(res.data.threadId);
-
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", content: res.data.reply, timestamp: new Date().toLocaleString() },
-    ]);
-  } catch (err: unknown) {
-    const error = err as {
-      response?: {
-        data?: {
-          error?: string;
-        };
-      };
-      message?: string;
+    const userMessage = {
+      role: "user",
+      content: input,
+      timestamp: new Date().toLocaleString(),
     };
-    
-    console.error("Error:", error.response?.data || error.message);
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "assistant",
-        content: `Error: ${error.response?.data?.error || error.message || "Unable to reach assistant."}`,
-        timestamp: new Date().toLocaleString(),
-      },
-    ]);
-  } finally {
-    setTyping(false);
-    setLoading(false);
-    setActiveRun(false);
-  }
-};
+    setMessages((prev) => [...prev, userMessage]);
+    const userInput = input;
+    setInput("");
+
+    try {
+      const res = await axios.post("/api/chat", {
+        input: userInput,
+        threadId,
+      });
+
+      if (res.data.error) {
+        throw new Error(res.data.error);
+      }
+
+      setThreadId(res.data.threadId);
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: res.data.reply, timestamp: new Date().toLocaleString() },
+      ]);
+    } catch (err: unknown) {
+      const error = err as {
+        response?: {
+          data?: {
+            error?: string;
+          };
+        };
+        message?: string;
+      };
+
+      console.error("Error:", error.response?.data || error.message);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `Error: ${error.response?.data?.error || error.message || "Unable to reach assistant."}`,
+          timestamp: new Date().toLocaleString(),
+        },
+      ]);
+    } finally {
+      setTyping(false);
+      setLoading(false);
+      setActiveRun(false);
+    }
+  };
 
   const copyChatToClipboard = async () => {
     const chatText = messages
-      .map((msg) => `${msg.timestamp} - ${msg.role === "user" ? "You" : " AI Survey Assistant"}:\n${msg.content}`)
+      .map((msg) => `${msg.timestamp} - ${msg.role === "user" ? "You" : "AI Survey Assistant"}:\n${msg.content}`)
       .join("\n\n");
     try {
       await navigator.clipboard.writeText(chatText);
@@ -111,12 +147,26 @@ const ChatApp = () => {
     }
   };
 
+  const clearChat = () => {
+    setMessages([]);
+    setThreadId(null);
+    localStorage.removeItem("chatHistory");
+    localStorage.removeItem("threadId");
+    console.log("🗑️ Chat cleared"); // Debug
+  };
+
   return (
     <div className="h-screen w-full flex flex-col bg-white">
       <header className="flex items-center justify-center w-full p-4 bg-white shadow-md">
         <Image src="/icon.png" alt="Icon" width={64} height={64} className="h-12 w-12 sm:h-16 sm:w-16" />
-        <h2 className="text-xl sm:text-2xl font-bold ml-2"> AI Survey Assistant</h2>
+        <h2 className="text-xl sm:text-2xl font-bold ml-2">AI Survey Assistant</h2>
       </header>
+
+      {/* Debug Panel - Remove after testing */}
+      <div className="bg-gray-100 p-2 text-xs text-center text-gray-600">
+        💬 Messages: {messages.length} | 🔗 Thread: {threadId ? "Active" : "None"} | 
+        📁 Loaded: {isLoaded ? "Yes" : "No"}
+      </div>
 
       <div className="flex-grow w-full max-w-4xl mx-auto flex flex-col p-4">
         <div
@@ -126,7 +176,7 @@ const ChatApp = () => {
           {messages.map((msg, index) => (
             <motion.div key={index}>
               <p className="font-bold mb-1">
-                {msg.role === "user" ? "You" : " AI Survey Assistant"}{" "}
+                {msg.role === "user" ? "You" : "AI Survey Assistant"}{" "}
                 {msg.timestamp && (
                   <span className="text-xs text-gray-500">({msg.timestamp})</span>
                 )}
@@ -213,11 +263,7 @@ const ChatApp = () => {
           </button>
           <button
             className="bg-red-400 hover:bg-red-500 text-white p-3 rounded w-full"
-            onClick={() => {
-              setMessages([]);
-              setThreadId(null);
-              localStorage.removeItem("threadId");
-            }}
+            onClick={clearChat}
           >
             Clear Chat
           </button>
