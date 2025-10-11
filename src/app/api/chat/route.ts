@@ -3,6 +3,32 @@ import axios from "axios";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]/route";
 
+// ADD THIS FUNCTION before the export
+function fixTableFormatting(text: string): string {
+  const lines = text.split('\n');
+  const processed: string[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // Detect table rows (lines starting with |)
+    if (line.startsWith('|') && line.endsWith('|')) {
+      processed.push(line);
+      
+      // If this is the first table row, add separator
+      if (i === 0 || !lines[i - 1].trim().startsWith('|')) {
+        const cols = line.split('|').filter(c => c.trim()).length;
+        const separator = '|' + ' --- |'.repeat(cols);
+        processed.push(separator);
+      }
+    } else {
+      processed.push(line);
+    }
+  }
+  
+  return processed.join('\n');
+}
+
 
 export async function POST(req: NextRequest) {
   
@@ -69,10 +95,10 @@ export async function POST(req: NextRequest) {
     const runId = runRes.data.id;
     let status = "in_progress";
     let retries = 0;
-    const maxRetries = 10;
+    const maxRetries = 25; // increase for complex code interpretor queries
 
     while ((status === "in_progress" || status === "queued") && retries < maxRetries) {
-      await new Promise((res) => setTimeout(res, 2000));
+      await new Promise((res) => setTimeout(res, 3000));
       const statusRes = await axios.get(
         `https://api.openai.com/v1/threads/${currentThreadId}/runs/${runId}`,
         { headers }
@@ -92,6 +118,8 @@ export async function POST(req: NextRequest) {
         assistantMsg?.content?.[0]?.text?.value?.replace(/【\d+:\d+†[^】]+】/g, "") ||
         "No valid response.";
     }
+    // add this line to fix table formatting
+    reply = fixTableFormatting(reply);
 
     return NextResponse.json({ reply, threadId: currentThreadId });
   } catch (err: any) {

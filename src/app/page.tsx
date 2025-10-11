@@ -12,7 +12,7 @@ export default function Home() {
   if (!session) {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
-        <h1 className="text-2xl mb-4">Welcome to Grenada AI Assistant</h1>
+        <h1 className="text-2xl mb-4">Welcome to  AI survey assistant</h1>
         <button
           className="px-4 py-2 bg-blue-600 text-white rounded"
           onClick={() => signIn()}
