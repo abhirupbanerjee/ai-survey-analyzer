@@ -21,6 +21,7 @@ const ChatApp = () => {
   const [typing, setTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -89,30 +90,86 @@ const ChatApp = () => {
 
       setInput(res.data.text);
       setLoading(false);
-    } catch (err: any) {
-      console.error("Transcription error:", err);
+    } catch (err) {
+      const error = err as Error;
+      console.error("Transcription error:", error);
       alert("Transcription failed. Please try again.");
       setLoading(false);
     }
   };
 
+  // Strip markdown syntax for clean speech
+  const stripMarkdown = (text: string): string => {
+    return text
+      // Remove headers (### Header)
+      .replace(/^#{1,6}\s+/gm, '')
+      // Remove bold (**text** or __text__)
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/__(.+?)__/g, '$1')
+      // Remove italic (*text* or _text_)
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/_(.+?)_/g, '$1')
+      // Remove strikethrough (~~text~~)
+      .replace(/~~(.+?)~~/g, '$1')
+      // Remove code blocks (```code```)
+      .replace(/```[\s\S]*?```/g, 'code block')
+      // Remove inline code (`code`)
+      .replace(/`(.+?)`/g, '$1')
+      // Remove links [text](url)
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      // Remove images ![alt](url)
+      .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '$1')
+      // Remove bullet points
+      .replace(/^\s*[-*+]\s+/gm, '')
+      // Remove numbered lists
+      .replace(/^\s*\d+\.\s+/gm, '')
+      // Remove horizontal rules
+      .replace(/^[\s]*[-*_]{3,}[\s]*$/gm, '')
+      // Remove blockquotes
+      .replace(/^>\s+/gm, '')
+      // Clean up extra whitespace
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
   // Text-to-Speech Function
   const speakText = (text: string) => {
     if ("speechSynthesis" in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+      
+      const cleanText = stripMarkdown(text);
+      const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.rate = 0.9;
       utterance.pitch = 1;
+      
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+      
       window.speechSynthesis.speak(utterance);
     } else {
       alert("Text-to-speech not supported in this browser.");
     }
   };
 
+  // Stop speech function
+  const stopSpeaking = () => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
+  };
+
   const sendMessage = async () => {
     if (activeRun || !input.trim()) return;
 
+    // Stop any ongoing speech when sending new message
+    stopSpeaking();
+
     setActiveRun(true);
     setLoading(true);
+    setTyping(true);
 
     const userMessage = {
       role: "user",
@@ -147,13 +204,14 @@ const ChatApp = () => {
       if (voiceEnabled) {
         speakText(res.data.reply);
       }
-    } catch (err: any) {
-      console.error("Error:", err.response?.data || err.message);
+    } catch (err) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      console.error("Error:", error.response?.data || error.message);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `Error: ${err.response?.data?.error || err.message || "Unable to reach assistant."}`,
+          content: `Error: ${error.response?.data?.error || error.message || "Unable to reach assistant."}`,
           timestamp: new Date().toLocaleString(),
         },
       ]);
@@ -220,25 +278,25 @@ const ChatApp = () => {
                     code: ({ ...props }) => (
                       <code style={{ fontFamily: "'Segoe UI', sans-serif", background: "#f3f4f6", padding: "0.2rem 0.4rem", borderRadius: "4px" }} {...props} />
                     ),
-                    p: ({ node, ...props }) => (
+                    p: ({ ...props }) => (
                       <p style={{ marginBottom: "0.75rem", lineHeight: "1.6", fontFamily: "'Segoe UI', sans-serif", fontSize: "16px" }} {...props} />
                     ),
-                    ul: ({ node, ...props }) => (
+                    ul: ({ ...props }) => (
                       <ul style={{ listStyleType: "disc", paddingLeft: "1.5rem", marginBottom: "1rem" }} {...props} />
                     ),
-                    ol: ({ node, ...props }) => (
+                    ol: ({ ...props }) => (
                       <ol style={{ listStyleType: "decimal", paddingLeft: "1.5rem", marginBottom: "1rem" }} {...props} />
                     ),
-                    li: ({ node, ...props }) => (
+                    li: ({ ...props }) => (
                       <li style={{ marginBottom: "0.4rem" }} {...props} />
                     ),
-                    table: ({ node, ...props }) => (
+                    table: ({ ...props }) => (
                       <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: "1rem" }} {...props} />
                     ),
-                    th: ({ node, ...props }) => (
+                    th: ({ ...props }) => (
                       <th style={{ border: "1px solid #ccc", background: "#f3f4f6", padding: "8px", textAlign: "left" }} {...props} />
                     ),
-                    td: ({ node, ...props }) => (
+                    td: ({ ...props }) => (
                       <td style={{ border: "1px solid #ccc", padding: "8px", textAlign: "left" }} {...props} />
                     ),
                   }}
@@ -257,58 +315,88 @@ const ChatApp = () => {
             </motion.div>
           ))}
           {typing && (
-            <div className="text-gray-500 italic text-center p-2">Assistant is typing...</div>
+            <div className="text-gray-500 italic p-2">
+              Assistant is thinking<span className="inline-block animate-pulse">...</span>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Input & Controls */}
-      <div className="w-full max-w-4xl mx-auto p-4 flex flex-col gap-2">
-        <div className="flex items-center gap-2">
+      {/* Stop Speaking Button (appears when speaking) */}
+      {isSpeaking && (
+        <div className="w-full max-w-4xl mx-auto px-4">
           <button
-            className={`p-3 rounded ${isRecording ? "bg-red-500" : "bg-green-500"} text-white`}
-            onClick={isRecording ? stopRecording : startRecording}
-            disabled={loading}
+            className="w-full bg-red-500 hover:bg-red-600 text-white p-2 rounded mb-2"
+            onClick={stopSpeaking}
           >
-            {isRecording ? "⏹ Stop" : "🎤 Record"}
+            ⏹ Stop Speaking
           </button>
+        </div>
+      )}
+
+      {/* Input & Controls */}
+      <div className="w-full max-w-4xl mx-auto p-4 flex flex-col gap-3">
+        {/* Main Input Row */}
+        <div className="flex items-center gap-2 bg-white border rounded-lg p-2 shadow-sm">
           <input
-            className="border rounded p-3 flex-grow"
+            className="flex-grow p-2 outline-none"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             placeholder="Type or record a message..."
           />
           <button
-            className="bg-blue-500 hover:bg-blue-600 text-white p-3 rounded"
+            className={`p-3 rounded-full transition-colors ${
+              isRecording 
+                ? "bg-red-500 hover:bg-red-600 text-white" 
+                : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+            }`}
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={loading}
+            title={isRecording ? "Stop recording" : "Start recording"}
+          >
+            {isRecording ? "⏹" : "🎤"}
+          </button>
+          <button
+            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
             onClick={sendMessage}
             disabled={loading}
+            title="Send message (Enter)"
           >
-            {loading ? "..." : "Send"}
+            {loading ? "..." : "➤"}
           </button>
         </div>
+
+        {/* Action Buttons Row */}
         <div className="flex gap-2">
           <button
-            className={`p-3 rounded flex-1 ${voiceEnabled ? "bg-green-500" : "bg-gray-400"} text-white`}
+            className={`flex-1 p-3 rounded-lg transition-all ${
+              voiceEnabled 
+                ? "bg-white border-2 border-green-500 text-green-600 font-medium" 
+                : "bg-gray-100 hover:bg-gray-200 text-gray-600"
+            }`}
             onClick={() => setVoiceEnabled(!voiceEnabled)}
+            title="Toggle auto-play voice responses"
           >
-            {voiceEnabled ? "🔊 Voice On" : "🔇 Voice Off"}
+            {voiceEnabled ? "🔊 Voice" : "🔇 Voice"}
           </button>
           <button
-            className="bg-yellow-500 hover:bg-yellow-600 text-white p-3 rounded flex-1"
+            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 p-3 rounded-lg transition-colors"
             onClick={copyChatToClipboard}
+            title="Copy chat to clipboard"
           >
-            Copy Chat
+            📋 Copy
           </button>
           <button
-            className="bg-red-400 hover:bg-red-500 text-white p-3 rounded flex-1"
+            className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 p-3 rounded-lg transition-colors"
             onClick={() => {
               setMessages([]);
               setThreadId(null);
               localStorage.removeItem("threadId");
             }}
+            title="Clear chat history"
           >
-            Clear Chat
+            🗑️ Clear
           </button>
         </div>
       </div>
