@@ -33,8 +33,6 @@ const ChatApp = () => {
 
   // LOAD from localStorage - runs ONCE on mount
   useEffect(() => {
-    if (isLoaded) return; // Prevent re-running
-    
     try {
       const saved = localStorage.getItem("chatHistory");
       const savedThread = localStorage.getItem("threadId");
@@ -57,8 +55,10 @@ const ChatApp = () => {
       console.error("❌ Error loading saved data:", error);
     }
     
+    // Mark as loaded after initial mount
     setIsLoaded(true);
-  }, []); // Empty deps - runs once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally empty - runs once on mount
 
   // SAVE to localStorage - runs AFTER initial load
   useEffect(() => {
