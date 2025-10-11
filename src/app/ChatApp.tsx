@@ -5,7 +5,6 @@ import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import { motion } from "framer-motion";
 import remarkGfm from "remark-gfm";
-import Image from "next/image";
 
 interface Message {
   role: string;
@@ -20,10 +19,12 @@ const ChatApp = () => {
   const [loading, setLoading] = useState(false);
   const [activeRun, setActiveRun] = useState(false);
   const [typing, setTyping] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false); // NEW: Prevent race condition
+  const [isRecording, setIsRecording] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
-  // Scroll to bottom when messages change
   useEffect(() => {
     chatContainerRef.current?.scrollTo({
       top: chatContainerRef.current.scrollHeight,
@@ -31,58 +32,87 @@ const ChatApp = () => {
     });
   }, [messages]);
 
-  // LOAD from localStorage - runs ONCE on mount
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("chatHistory");
-      const savedThread = localStorage.getItem("threadId");
-      
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        console.log("✅ Loaded messages:", parsed.length); // Debug
-        setMessages(parsed);
-      } else {
-        console.log("ℹ️ No saved messages found");
-      }
-      
-      if (savedThread) {
-        console.log("✅ Loaded threadId:", savedThread); // Debug
-        setThreadId(savedThread);
-      } else {
-        console.log("ℹ️ No saved thread found");
-      }
-    } catch (error) {
-      console.error("❌ Error loading saved data:", error);
-    }
-    
-    // Mark as loaded after initial mount
-    setIsLoaded(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Intentionally empty - runs once on mount
+    localStorage.setItem("chatHistory", JSON.stringify(messages));
+    if (threadId) localStorage.setItem("threadId", threadId);
+  }, [messages, threadId]);
 
-  // SAVE to localStorage - runs AFTER initial load
   useEffect(() => {
-    if (!isLoaded) return; // Don't save during initial load
-    
+    const saved = localStorage.getItem("chatHistory");
+    const savedThread = localStorage.getItem("threadId");
+    if (saved) setMessages(JSON.parse(saved));
+    if (savedThread) setThreadId(savedThread);
+  }, []);
+
+  // Voice Recording Functions
+  const startRecording = async () => {
     try {
-      localStorage.setItem("chatHistory", JSON.stringify(messages));
-      console.log("💾 Saved messages:", messages.length); // Debug
-      
-      if (threadId) {
-        localStorage.setItem("threadId", threadId);
-        console.log("💾 Saved threadId:", threadId); // Debug
-      }
-    } catch (error) {
-      console.error("❌ Error saving data:", error);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        await transcribeAudio(audioBlob);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      alert("Could not access microphone. Please check permissions.");
     }
-  }, [messages, threadId, isLoaded]);
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const transcribeAudio = async (audioBlob: Blob) => {
+    try {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "recording.webm");
+
+      const res = await axios.post("/api/transcribe", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      setInput(res.data.text);
+      setLoading(false);
+    } catch (err: any) {
+      console.error("Transcription error:", err);
+      alert("Transcription failed. Please try again.");
+      setLoading(false);
+    }
+  };
+
+  // Text-to-Speech Function
+  const speakText = (text: string) => {
+    if ("speechSynthesis" in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      window.speechSynthesis.speak(utterance);
+    } else {
+      alert("Text-to-speech not supported in this browser.");
+    }
+  };
 
   const sendMessage = async () => {
     if (activeRun || !input.trim()) return;
 
     setActiveRun(true);
     setLoading(true);
-    setTyping(true);
 
     const userMessage = {
       role: "user",
@@ -105,26 +135,25 @@ const ChatApp = () => {
 
       setThreadId(res.data.threadId);
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: res.data.reply, timestamp: new Date().toLocaleString() },
-      ]);
-    } catch (err: unknown) {
-      const error = err as {
-        response?: {
-          data?: {
-            error?: string;
-          };
-        };
-        message?: string;
+      const assistantMessage = {
+        role: "assistant",
+        content: res.data.reply,
+        timestamp: new Date().toLocaleString(),
       };
 
-      console.error("Error:", error.response?.data || error.message);
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      // Auto-speak if voice is enabled
+      if (voiceEnabled) {
+        speakText(res.data.reply);
+      }
+    } catch (err: any) {
+      console.error("Error:", err.response?.data || err.message);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: `Error: ${error.response?.data?.error || error.message || "Unable to reach assistant."}`,
+          content: `Error: ${err.response?.data?.error || err.message || "Unable to reach assistant."}`,
           timestamp: new Date().toLocaleString(),
         },
       ]);
@@ -137,7 +166,7 @@ const ChatApp = () => {
 
   const copyChatToClipboard = async () => {
     const chatText = messages
-      .map((msg) => `${msg.timestamp} - ${msg.role === "user" ? "You" : "AI Survey Assistant"}:\n${msg.content}`)
+      .map((msg) => `${msg.timestamp} - ${msg.role === "user" ? "You" : "Grenada AI Assistant"}:\n${msg.content}`)
       .join("\n\n");
     try {
       await navigator.clipboard.writeText(chatText);
@@ -147,27 +176,15 @@ const ChatApp = () => {
     }
   };
 
-  const clearChat = () => {
-    setMessages([]);
-    setThreadId(null);
-    localStorage.removeItem("chatHistory");
-    localStorage.removeItem("threadId");
-    console.log("🗑️ Chat cleared"); // Debug
-  };
-
   return (
     <div className="h-screen w-full flex flex-col bg-white">
+      {/* Header */}
       <header className="flex items-center justify-center w-full p-4 bg-white shadow-md">
-        <Image src="/icon.png" alt="Icon" width={64} height={64} className="h-12 w-12 sm:h-16 sm:w-16" />
-        <h2 className="text-xl sm:text-2xl font-bold ml-2">AI Survey Assistant</h2>
+        <img src="/icon.png" alt="Icon" className="h-12 w-12 sm:h-16 sm:w-16" />
+        <h2 className="text-xl sm:text-2xl font-bold ml-2">Grenada AI Assistant</h2>
       </header>
 
-      {/* Debug Panel - Remove after testing */}
-      <div className="bg-gray-100 p-2 text-xs text-center text-gray-600">
-        💬 Messages: {messages.length} | 🔗 Thread: {threadId ? "Active" : "None"} | 
-        📁 Loaded: {isLoaded ? "Yes" : "No"}
-      </div>
-
+      {/* Chat Container */}
       <div className="flex-grow w-full max-w-4xl mx-auto flex flex-col p-4">
         <div
           ref={chatContainerRef}
@@ -176,7 +193,7 @@ const ChatApp = () => {
           {messages.map((msg, index) => (
             <motion.div key={index}>
               <p className="font-bold mb-1">
-                {msg.role === "user" ? "You" : "AI Survey Assistant"}{" "}
+                {msg.role === "user" ? "You" : "Grenada AI Assistant"}{" "}
                 {msg.timestamp && (
                   <span className="text-xs text-gray-500">({msg.timestamp})</span>
                 )}
@@ -203,31 +220,39 @@ const ChatApp = () => {
                     code: ({ ...props }) => (
                       <code style={{ fontFamily: "'Segoe UI', sans-serif", background: "#f3f4f6", padding: "0.2rem 0.4rem", borderRadius: "4px" }} {...props} />
                     ),
-                    p: ({ ...props }) => (
+                    p: ({ node, ...props }) => (
                       <p style={{ marginBottom: "0.75rem", lineHeight: "1.6", fontFamily: "'Segoe UI', sans-serif", fontSize: "16px" }} {...props} />
                     ),
-                    ul: ({ ...props }) => (
+                    ul: ({ node, ...props }) => (
                       <ul style={{ listStyleType: "disc", paddingLeft: "1.5rem", marginBottom: "1rem" }} {...props} />
                     ),
-                    ol: ({ ...props }) => (
+                    ol: ({ node, ...props }) => (
                       <ol style={{ listStyleType: "decimal", paddingLeft: "1.5rem", marginBottom: "1rem" }} {...props} />
                     ),
-                    li: ({ ...props }) => (
+                    li: ({ node, ...props }) => (
                       <li style={{ marginBottom: "0.4rem" }} {...props} />
                     ),
-                    table: ({ ...props }) => (
+                    table: ({ node, ...props }) => (
                       <table style={{ borderCollapse: "collapse", width: "100%", marginBottom: "1rem" }} {...props} />
                     ),
-                    th: ({ ...props }) => (
+                    th: ({ node, ...props }) => (
                       <th style={{ border: "1px solid #ccc", background: "#f3f4f6", padding: "8px", textAlign: "left" }} {...props} />
                     ),
-                    td: ({ ...props }) => (
+                    td: ({ node, ...props }) => (
                       <td style={{ border: "1px solid #ccc", padding: "8px", textAlign: "left" }} {...props} />
                     ),
                   }}
                 >
                   {msg.content}
                 </ReactMarkdown>
+                {msg.role === "assistant" && (
+                  <button
+                    className="mt-2 text-xs text-blue-600 hover:underline"
+                    onClick={() => speakText(msg.content)}
+                  >
+                    🔊 Play Audio
+                  </button>
+                )}
               </div>
             </motion.div>
           ))}
@@ -237,33 +262,51 @@ const ChatApp = () => {
         </div>
       </div>
 
+      {/* Input & Controls */}
       <div className="w-full max-w-4xl mx-auto p-4 flex flex-col gap-2">
-        <div className="flex flex-col sm:flex-row items-center gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            className={`p-3 rounded ${isRecording ? "bg-red-500" : "bg-green-500"} text-white`}
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={loading}
+          >
+            {isRecording ? "⏹ Stop" : "🎤 Record"}
+          </button>
           <input
-            className="border rounded p-3 w-full sm:w-4/5"
+            className="border rounded p-3 flex-grow"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            placeholder="Type a message..."
+            placeholder="Type or record a message..."
           />
           <button
-            className="bg-blue-500 hover:bg-blue-600 text-white p-3 rounded w-full sm:w-1/5"
+            className="bg-blue-500 hover:bg-blue-600 text-white p-3 rounded"
             onClick={sendMessage}
             disabled={loading}
           >
             {loading ? "..." : "Send"}
           </button>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex gap-2">
           <button
-            className="bg-yellow-500 hover:bg-yellow-600 text-white p-3 rounded w-full"
+            className={`p-3 rounded flex-1 ${voiceEnabled ? "bg-green-500" : "bg-gray-400"} text-white`}
+            onClick={() => setVoiceEnabled(!voiceEnabled)}
+          >
+            {voiceEnabled ? "🔊 Voice On" : "🔇 Voice Off"}
+          </button>
+          <button
+            className="bg-yellow-500 hover:bg-yellow-600 text-white p-3 rounded flex-1"
             onClick={copyChatToClipboard}
           >
             Copy Chat
           </button>
           <button
-            className="bg-red-400 hover:bg-red-500 text-white p-3 rounded w-full"
-            onClick={clearChat}
+            className="bg-red-400 hover:bg-red-500 text-white p-3 rounded flex-1"
+            onClick={() => {
+              setMessages([]);
+              setThreadId(null);
+              localStorage.removeItem("threadId");
+            }}
           >
             Clear Chat
           </button>
