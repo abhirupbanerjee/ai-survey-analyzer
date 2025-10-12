@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
-    const OPENAI_ORGANIZATION = process.env.OPENAI_ORGANIZATION;
+    //const OPENAI_ORGANIZATION = process.env.OPENAI_ORGANIZATION;
 
     if (!OPENAI_API_KEY || !ASSISTANT_ID) {
       return NextResponse.json({ error: "Missing OpenAI credentials" }, { status: 500 });
@@ -34,9 +34,7 @@ export async function POST(req: NextRequest) {
       "Content-Type": "application/json",
       "OpenAI-Beta": "assistants=v2",
     };
-    if (OPENAI_ORGANIZATION) {
-      headers["OpenAI-Organization"] = OPENAI_ORGANIZATION;
-    }
+
 
     let currentThreadId = threadId;
     if (!currentThreadId) {
@@ -63,10 +61,10 @@ export async function POST(req: NextRequest) {
     const runId = runRes.data.id;
     let status = "in_progress";
     let retries = 0;
-    const maxRetries = 25;
+    const maxRetries = 100;
 
     while ((status === "in_progress" || status === "queued") && retries < maxRetries) {
-      await new Promise((res) => setTimeout(res, 3000));
+      await new Promise((res) => setTimeout(res, 3500));
       const statusRes = await axios.get(
         `https://api.openai.com/v1/threads/${currentThreadId}/runs/${runId}`,
         { headers }

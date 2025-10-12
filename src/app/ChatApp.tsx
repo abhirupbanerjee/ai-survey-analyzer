@@ -22,7 +22,9 @@ const ChatApp = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -41,9 +43,35 @@ const ChatApp = () => {
   useEffect(() => {
     const saved = localStorage.getItem("chatHistory");
     const savedThread = localStorage.getItem("threadId");
-    if (saved) setMessages(JSON.parse(saved));
+    if (saved) {
+      try {
+        setMessages(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse chat history:", e);
+      }
+    }
     if (savedThread) setThreadId(savedThread);
+    setIsLoading(false);
   }, []);
+
+  // Auto-resize textarea
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    
+    // Auto-resize textarea
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+    }
+  };
+
+  // Reset textarea height when input is cleared
+  useEffect(() => {
+    if (input === '' && textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+  }, [input]);
 
   // Voice Recording Functions
   const startRecording = async () => {
@@ -89,6 +117,13 @@ const ChatApp = () => {
       });
 
       setInput(res.data.text);
+      
+      // Auto-resize textarea after transcription
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+      }
+      
       setLoading(false);
     } catch (err) {
       const error = err as Error;
@@ -163,6 +198,11 @@ const ChatApp = () => {
     setMessages((prev) => [...prev, userMessage]);
     const userInput = input;
     setInput("");
+
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
 
     try {
       const res = await axios.post("/api/chat", {
@@ -246,18 +286,16 @@ const ChatApp = () => {
           ref={chatContainerRef}
           className="flex-grow overflow-y-auto border p-3 space-y-4 bg-white shadow rounded-lg h-[65vh] sm:h-[70vh]"
         >
-          {messages.length === 0 && (
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-gray-500">Loading...</div>
+            </div>
+          ) : messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-4">
-              <div className="text-4xl sm:text-6xl mb-4">🌴</div>
-              <h3 className="text-lg sm:text-2xl font-bold mb-3 text-gray-800">
-                Welcome to the Caribbean AI Survey Assistant
-              </h3>
               <div className="text-xs sm:text-sm text-gray-600 mb-6 max-w-2xl leading-relaxed">
                 <p className="mb-3">
                   This survey was conducted to capture the voices of Caribbean public and private sector leaders on artificial intelligence. Too often, global surveys overlook or dilute Caribbean perspectives.
-                </p>
-                <p className="mb-3">
-                  This initiative aims to change that — making sure our priorities, concerns, and aspirations are heard. The insights here represent what could become the landmark survey on AI for Caribbean leaders.
+                  This initiative aims to change that — making sure our region&apos;s priorities, concerns, and aspirations are heard. The insights here represent what could become the landmark survey on AI for Caribbean leaders.
                 </p>
                 <p className="font-semibold text-gray-700 mb-4">Explore the findings below:</p>
               </div>
@@ -293,7 +331,7 @@ const ChatApp = () => {
                 </button>
               </div>
             </div>
-          )}
+          ) : null}
           {messages.map((msg, index) => (
             <motion.div key={index}>
               <p className="font-bold mb-1">
@@ -362,7 +400,7 @@ const ChatApp = () => {
           ))}
           {typing && (
             <div className="text-gray-500 italic p-2">
-              Assistant is thinking<span className="inline-block animate-pulse">...</span>
+              Your AI Assistant is thinking<span className="inline-block animate-pulse">...</span>
             </div>
           )}
         </div>
@@ -383,13 +421,21 @@ const ChatApp = () => {
       {/* Input & Controls */}
       <div className="w-full max-w-4xl mx-auto p-4 flex flex-col gap-3">
         {/* Main Input Row */}
-        <div className="flex items-center gap-2 bg-white border rounded-lg p-2 shadow-sm">
-          <input
-            className="flex-grow p-2 outline-none"
+        <div className="flex items-end gap-2 bg-white border rounded-lg p-2 shadow-sm">
+          <textarea
+            ref={textareaRef}
+            className="flex-grow p-2 outline-none resize-none overflow-y-auto"
+            style={{ minHeight: '40px', maxHeight: '120px' }}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            onChange={handleInputChange}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
             placeholder="Type or record a message..."
+            rows={1}
           />
           <button
             className={`p-3 rounded-full transition-colors ${
@@ -441,6 +487,7 @@ const ChatApp = () => {
               setMessages([]);
               setThreadId(null);
               localStorage.removeItem("threadId");
+              localStorage.removeItem("chatHistory");
             }}
             title="Clear chat history"
           >
