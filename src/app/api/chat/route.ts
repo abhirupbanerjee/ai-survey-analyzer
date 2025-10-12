@@ -17,15 +17,6 @@ interface OpenAIMessagesResponse {
   };
 }
 
-interface ToolCall {
-  id: string;
-  type: string;
-  function: {
-    name: string;
-    arguments: string;
-  };
-}
-
 // Function to call Tavily search - Flexible domain support
 async function searchWeb(query: string, max_results: number = 3, include_domains: string[] = []) {
   try {
