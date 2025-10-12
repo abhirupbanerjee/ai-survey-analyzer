@@ -35,24 +35,50 @@ const ChatApp = () => {
     });
   }, [messages]);
 
+  // ✅ IMPROVED LOAD LOGIC WITH RETRY
   useEffect(() => {
-    localStorage.setItem("chatHistory", JSON.stringify(messages));
-    if (threadId) localStorage.setItem("threadId", threadId);
-  }, [messages, threadId]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("chatHistory");
-    const savedThread = localStorage.getItem("threadId");
-    if (saved) {
+    const loadFromStorage = () => {
       try {
-        setMessages(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse chat history:", e);
+        const saved = localStorage.getItem("chatHistory");
+        const savedThread = localStorage.getItem("threadId");
+        
+        console.log("📂 Loading from localStorage:", { 
+          hasChatHistory: !!saved, 
+          hasThreadId: !!savedThread 
+        });
+        
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setMessages(parsed);
+              console.log("✅ Loaded", parsed.length, "messages");
+            }
+          } catch (parseError) {
+            console.error("❌ Failed to parse chat history:", parseError);
+            localStorage.removeItem("chatHistory"); // Clean up corrupted data
+          }
+        }
+        
+        if (savedThread) {
+          setThreadId(savedThread);
+          console.log("✅ Loaded threadId:", savedThread);
+        }
+      } catch (error) {
+        console.error("❌ Error accessing localStorage:", error);
+      } finally {
+        setIsLoading(false);
       }
-    }
-    if (savedThread) setThreadId(savedThread);
-    setIsLoading(false);
-  }, []);
+    };
+
+    // Immediate load
+    loadFromStorage();
+    
+    // Retry after 100ms to handle race conditions
+    const timer = setTimeout(loadFromStorage, 100);
+    
+    return () => clearTimeout(timer);
+  }, []); // Empty deps - runs once on mount
 
   // Auto-resize textarea
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -181,6 +207,7 @@ const ChatApp = () => {
     }
   };
 
+  // ✅ IMPROVED SEND MESSAGE WITH IMMEDIATE SAVES
   const sendMessage = async () => {
     if (activeRun || !input.trim()) return;
 
@@ -195,7 +222,13 @@ const ChatApp = () => {
       content: input,
       timestamp: new Date().toLocaleString(),
     };
-    setMessages((prev) => [...prev, userMessage]);
+    
+    // ✅ Update state AND save immediately (synchronous)
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    localStorage.setItem("chatHistory", JSON.stringify(newMessages));
+    console.log("💾 Saved user message to localStorage");
+    
     const userInput = input;
     setInput("");
 
@@ -214,7 +247,12 @@ const ChatApp = () => {
         throw new Error(res.data.error);
       }
 
-      setThreadId(res.data.threadId);
+      const newThreadId = res.data.threadId;
+      setThreadId(newThreadId);
+      
+      // ✅ Save threadId immediately
+      localStorage.setItem("threadId", newThreadId);
+      console.log("💾 Saved threadId to localStorage");
 
       const assistantMessage = {
         role: "assistant",
@@ -222,7 +260,11 @@ const ChatApp = () => {
         timestamp: new Date().toLocaleString(),
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      // ✅ Update with assistant message AND save
+      const finalMessages = [...newMessages, assistantMessage];
+      setMessages(finalMessages);
+      localStorage.setItem("chatHistory", JSON.stringify(finalMessages));
+      console.log("💾 Saved assistant message to localStorage");
 
       if (voiceEnabled) {
         speakText(res.data.reply);
@@ -230,14 +272,19 @@ const ChatApp = () => {
     } catch (err) {
       const error = err as { response?: { data?: { error?: string } }; message?: string };
       console.error("Error:", error.response?.data || error.message);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `Error: ${error.response?.data?.error || error.message || "Unable to reach assistant."}`,
-          timestamp: new Date().toLocaleString(),
-        },
-      ]);
+      
+      const errorMessage = {
+        role: "assistant",
+        content: `Error: ${error.response?.data?.error || error.message || "Unable to reach assistant."}`,
+        timestamp: new Date().toLocaleString(),
+      };
+      
+      // ✅ Save error state too
+      const errorMessages = [...newMessages, errorMessage];
+      setMessages(errorMessages);
+      localStorage.setItem("chatHistory", JSON.stringify(errorMessages));
+      console.log("💾 Saved error message to localStorage");
+      
     } finally {
       setTyping(false);
       setLoading(false);
@@ -486,8 +533,9 @@ const ChatApp = () => {
             onClick={() => {
               setMessages([]);
               setThreadId(null);
-              localStorage.removeItem("threadId");
               localStorage.removeItem("chatHistory");
+              localStorage.removeItem("threadId");
+              console.log("🗑️ Cleared chat history and localStorage");
             }}
             title="Clear chat history"
           >
