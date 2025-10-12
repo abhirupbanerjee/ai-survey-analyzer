@@ -17,13 +17,52 @@ interface OpenAIMessagesResponse {
   };
 }
 
+interface ToolCall {
+  id: string;
+  type: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface RunStep {
+  id: string;
+  type: string;
+  step_details: {
+    type: string;
+    tool_calls?: ToolCall[];
+  };
+}
+
+// Function to call Tavily search
+async function searchWeb(query: string, max_results: number = 3, include_domains: string[] = ["ey.com"]) {
+  try {
+    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, max_results, include_domains }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Search failed: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Web search error:", error);
+    return { error: "Web search failed", results: [] };
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { input, threadId } = await req.json();
 
     const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
-    //const OPENAI_ORGANIZATION = process.env.OPENAI_ORGANIZATION;
 
     if (!OPENAI_API_KEY || !ASSISTANT_ID) {
       return NextResponse.json({ error: "Missing OpenAI credentials" }, { status: 500 });
@@ -34,7 +73,6 @@ export async function POST(req: NextRequest) {
       "Content-Type": "application/json",
       "OpenAI-Beta": "assistants=v2",
     };
-
 
     let currentThreadId = threadId;
     if (!currentThreadId) {
@@ -52,9 +90,44 @@ export async function POST(req: NextRequest) {
       { headers }
     );
 
+    // Create run with tools
     const runRes = await axios.post(
       `https://api.openai.com/v1/threads/${currentThreadId}/runs`,
-      { assistant_id: ASSISTANT_ID },
+      { 
+        assistant_id: ASSISTANT_ID,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "web_search",
+              description: "Search the web for current information, news, or data not in your training. Use this when users ask about recent events, current statistics, latest news, or any information that might have changed since your last update.",
+              parameters: {
+                type: "object",
+                properties: {
+                  query: {
+                    type: "string",
+                    description: "The search query to find relevant information"
+                  },
+                  max_results: {
+                    type: "integer",
+                    description: "Maximum number of search results to return (default: 3, max: 10)",
+                    default: 3
+                  },
+                  include_domains: {
+                    type: "array",
+                    items: {
+                      type: "string"
+                    },
+                    description: "Specific domains to search within (default: ['ey.com'])",
+                    default: ["ey.com"]
+                  }
+                },
+                required: ["query"]
+              }
+            }
+          }
+        ]
+      },
       { headers }
     );
 
@@ -63,13 +136,54 @@ export async function POST(req: NextRequest) {
     let retries = 0;
     const maxRetries = 100;
 
-    while ((status === "in_progress" || status === "queued") && retries < maxRetries) {
+    // Poll for completion and handle function calls
+    while ((status === "in_progress" || status === "queued" || status === "requires_action") && retries < maxRetries) {
       await new Promise((res) => setTimeout(res, 3500));
+      
       const statusRes = await axios.get(
         `https://api.openai.com/v1/threads/${currentThreadId}/runs/${runId}`,
         { headers }
       );
+      
       status = statusRes.data.status;
+
+      // Handle function calls
+      if (status === "requires_action" && statusRes.data.required_action?.type === "submit_tool_outputs") {
+        const toolCalls = statusRes.data.required_action.submit_tool_outputs.tool_calls;
+        const toolOutputs = [];
+
+        for (const toolCall of toolCalls) {
+          if (toolCall.function.name === "web_search") {
+            try {
+              const args = JSON.parse(toolCall.function.arguments);
+              const searchResults = await searchWeb(
+                args.query, 
+                args.max_results || 3, 
+                args.include_domains || ["ey.com"]
+              );
+              
+              toolOutputs.push({
+                tool_call_id: toolCall.id,
+                output: JSON.stringify(searchResults)
+              });
+            } catch (error) {
+              console.error("Function call error:", error);
+              toolOutputs.push({
+                tool_call_id: toolCall.id,
+                output: JSON.stringify({ error: "Search function failed", results: [] })
+              });
+            }
+          }
+        }
+
+        // Submit tool outputs
+        await axios.post(
+          `https://api.openai.com/v1/threads/${currentThreadId}/runs/${runId}/submit_tool_outputs`,
+          { tool_outputs: toolOutputs },
+          { headers }
+        );
+      }
+
       retries++;
     }
 
@@ -83,6 +197,10 @@ export async function POST(req: NextRequest) {
       reply =
         assistantMsg?.content?.[0]?.text?.value?.replace(/【\d+:\d+†[^】]+】/g, "") ||
         "No valid response.";
+    } else if (status === "failed") {
+      reply = "I apologize, but I encountered an error while processing your request. Please try again.";
+    } else if (retries >= maxRetries) {
+      reply = "The response is taking longer than expected. Please try again or rephrase your question.";
     }
 
     return NextResponse.json({ reply, threadId: currentThreadId });
@@ -98,6 +216,7 @@ export async function POST(req: NextRequest) {
       message?: string;
     };
     
+    console.error("Chat API error:", error);
     return NextResponse.json(
       { error: error.response?.data?.error?.message || error.message || "Unknown error" },
       { status: 500 }
