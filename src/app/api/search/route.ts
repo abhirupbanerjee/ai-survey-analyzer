@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   try {
-    const { query, max_results = 3, include_domains = ["ey.com"] } = await req.json();
+    const { query, max_results = 3, include_domains = [] } = await req.json();
+    // Allow flexible domain filtering - empty array means search all domains
 
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
@@ -44,7 +45,13 @@ export async function POST(req: NextRequest) {
     // Format the response for better readability
     const formattedResults = {
       answer: data.answer,
-      results: data.results?.map((result: any) => ({
+      results: data.results?.map((result: {
+        title: string;
+        url: string;
+        content: string;
+        raw_content: string;
+        score: number;
+      }) => ({
         title: result.title,
         url: result.url,
         content: result.content,

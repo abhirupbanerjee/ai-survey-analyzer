@@ -26,17 +26,8 @@ interface ToolCall {
   };
 }
 
-interface RunStep {
-  id: string;
-  type: string;
-  step_details: {
-    type: string;
-    tool_calls?: ToolCall[];
-  };
-}
-
-// Function to call Tavily search
-async function searchWeb(query: string, max_results: number = 3, include_domains: string[] = ["ey.com"]) {
+// Function to call Tavily search - Flexible domain support
+async function searchWeb(query: string, max_results: number = 3, include_domains: string[] = []) {
   try {
     const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/search`, {
       method: "POST",
@@ -100,7 +91,7 @@ export async function POST(req: NextRequest) {
             type: "function",
             function: {
               name: "web_search",
-              description: "Search the web for current information, news, or data not in your training. Use this when users ask about recent events, current statistics, latest news, or any information that might have changed since your last update.",
+              description: "Search the web for current information, news, research, or data. Use this when users ask about recent events, current statistics, latest news, company insights, or any information that might have changed since your last update. You can search specific domains or the entire web.",
               parameters: {
                 type: "object",
                 properties: {
@@ -118,8 +109,8 @@ export async function POST(req: NextRequest) {
                     items: {
                       type: "string"
                     },
-                    description: "Specific domains to search within (default: ['ey.com'])",
-                    default: ["ey.com"]
+                    description: "Optional: Specific domains to search within (e.g., ['ey.com', 'deloitte.com']). Leave empty to search all domains.",
+                    default: []
                   }
                 },
                 required: ["query"]
@@ -156,10 +147,11 @@ export async function POST(req: NextRequest) {
           if (toolCall.function.name === "web_search") {
             try {
               const args = JSON.parse(toolCall.function.arguments);
+              // Support flexible domain filtering
               const searchResults = await searchWeb(
                 args.query, 
-                args.max_results || 3, 
-                args.include_domains || ["ey.com"]
+                args.max_results || 3,
+                args.include_domains || []
               );
               
               toolOutputs.push({
