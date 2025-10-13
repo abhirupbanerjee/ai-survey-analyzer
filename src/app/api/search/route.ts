@@ -1,11 +1,21 @@
+// app/api/tools/web_search/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   try {
-    const { query, max_results = 3, include_domains = [] } = await req.json();
-    // Allow flexible domain filtering - empty array means search all domains
+    if (req.method !== "POST") {
+      return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+    }
 
-    if (!query) {
+    const body = await req.json().catch(() => ({}));
+    const query: string = body?.query;
+    const max_results: number = Math.min(Math.max(Number(body?.max_results ?? 3), 1), 10);
+    const include_domains: string[] =
+      Array.isArray(body?.include_domains) && body.include_domains.length > 0
+        ? body.include_domains
+        : ["ey.com"]; // EY-first by default
+
+    if (!query || typeof query !== "string") {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
 
@@ -14,59 +24,48 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Tavily API key not configured" }, { status: 500 });
     }
 
-    const response = await fetch("https://api.tavily.com/search", {
+    // Call Tavily
+    const resp = await fetch("https://api.tavily.com/search", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Tavily-API-Key": TAVILY_API_KEY,
       },
       body: JSON.stringify({
-        api_key: TAVILY_API_KEY,
-        query: query,
-        search_depth: "basic",
-        include_answer: true,
-        include_images: false,
-        include_raw_content: "text",
-        max_results: max_results,
-        include_domains: include_domains,
-        exclude_domains: []
+        query,
+        include_domains,
+        max_results,
+        search_depth: "advanced",
+        include_answer: false,
+        include_raw_content: false,
       }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
       return NextResponse.json(
-        { error: error.detail || "Tavily search failed" },
-        { status: response.status }
+        { error: `Tavily error: ${resp.status} ${text}` },
+        { status: 502 }
       );
     }
 
-    const data = await response.json();
-    
-    // Format the response for better readability
-    const formattedResults = {
-      answer: data.answer,
-      results: data.results?.map((result: {
-        title: string;
-        url: string;
-        content: string;
-        raw_content: string;
-        score: number;
-      }) => ({
-        title: result.title,
-        url: result.url,
-        content: result.content,
-        raw_content: result.raw_content,
-        score: result.score
-      })) || []
+    const data = await resp.json();
+
+    const results = Array.isArray(data?.results) ? data.results : [];
+    const formatted = {
+      query,
+      include_domains,
+      count: results.length,
+      results: results.slice(0, max_results).map((r: any) => ({
+        title: r.title ?? "",
+        url: r.url ?? "",
+        snippet: r.content ?? r.snippet ?? "",
+      })),
     };
 
-    return NextResponse.json(formattedResults);
-  } catch (err) {
-    const error = err as Error;
-    console.error("Tavily search error:", error);
-    return NextResponse.json(
-      { error: error.message || "Unknown error" },
-      { status: 500 }
-    );
+    return NextResponse.json(formatted);
+  } catch (err: any) {
+    console.error("Tavily search error:", err);
+    return NextResponse.json({ error: err?.message ?? "Unknown error" }, { status: 500 });
   }
 }

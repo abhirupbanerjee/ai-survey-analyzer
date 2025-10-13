@@ -1,208 +1,141 @@
+// app/api/chat/route.ts
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
-import axios from "axios";
 
-// Define types for OpenAI API responses
-interface OpenAIMessage {
-  role: string;
-  content?: Array<{
-    text?: {
-      value?: string;
-    };
-  }>;
-}
-
-interface OpenAIMessagesResponse {
-  data: {
-    data: OpenAIMessage[];
-  };
-}
-
-// Function to call Tavily search - Flexible domain support
-async function searchWeb(query: string, max_results: number = 3, include_domains: string[] = []) {
-  try {
-    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/search`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query, max_results, include_domains }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Search failed: ${response.statusText}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error("Web search error:", error);
-    return { error: "Web search failed", results: [] };
-  }
-}
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: NextRequest) {
   try {
-    const { input, threadId } = await req.json();
+    const { threadId, assistantId, message } = await req.json();
 
-    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-    const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
-
-    if (!OPENAI_API_KEY || !ASSISTANT_ID) {
-      return NextResponse.json({ error: "Missing OpenAI credentials" }, { status: 500 });
+    if (!threadId || !assistantId) {
+      return NextResponse.json({ error: "threadId and assistantId are required" }, { status: 400 });
     }
 
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-      "OpenAI-Beta": "assistants=v2",
-    };
-
-    let currentThreadId = threadId;
-    if (!currentThreadId) {
-      const threadRes = await axios.post(
-        "https://api.openai.com/v1/threads",
-        {},
-        { headers }
-      );
-      currentThreadId = threadRes.data.id;
+    if (message && typeof message === "string") {
+      await client.beta.threads.messages.create(threadId, {
+        role: "user",
+        content: message,
+      });
     }
 
-    await axios.post(
-      `https://api.openai.com/v1/threads/${currentThreadId}/messages`,
-      { role: "user", content: input },
-      { headers }
-    );
+    let run = await client.beta.threads.runs.create(threadId, { assistant_id: assistantId });
 
-    // Create run with tools
-    const runRes = await axios.post(
-      `https://api.openai.com/v1/threads/${currentThreadId}/runs`,
-      { 
-        assistant_id: ASSISTANT_ID,
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "web_search",
-              description: "Search the web for current information, news, research, or data. Use this when users ask about recent events, current statistics, latest news, company insights, or any information that might have changed since your last update. You can search specific domains or the entire web.",
-              parameters: {
-                type: "object",
-                properties: {
-                  query: {
-                    type: "string",
-                    description: "The search query to find relevant information"
-                  },
-                  max_results: {
-                    type: "integer",
-                    description: "Maximum number of search results to return (default: 3, max: 10)",
-                    default: 3
-                  },
-                  include_domains: {
-                    type: "array",
-                    items: {
-                      type: "string"
-                    },
-                    description: "Optional: Specific domains to search within (e.g., ['ey.com', 'deloitte.com']). Leave empty to search all domains.",
-                    default: []
-                  }
-                },
-                required: ["query"]
-              }
+    while (!["completed", "failed", "cancelled", "expired"].includes(run.status)) {
+      if (run.status === "requires_action") {
+        const toolCalls = run.required_action?.submit_tool_outputs?.tool_calls ?? [];
+
+        // ✅ Return outputs for **all** tool_call_ids in this batch
+        const tool_outputs = await Promise.all(
+          toolCalls.map(async (tc) => {
+            const tool_call_id = tc.id;
+            const fn = tc.function;
+            const args = safeParse(fn.arguments);
+
+            if (fn.name === "web_search") {
+              const out = await doWebSearch(args); // EY-first inside
+              return { tool_call_id, output: JSON.stringify(out) };
             }
-          }
-        ]
-      },
-      { headers }
-    );
 
-    const runId = runRes.data.id;
-    let status = "in_progress";
-    let retries = 0;
-    const maxRetries = 100;
-
-    // Poll for completion and handle function calls
-    while ((status === "in_progress" || status === "queued" || status === "requires_action") && retries < maxRetries) {
-      await new Promise((res) => setTimeout(res, 3500));
-      
-      const statusRes = await axios.get(
-        `https://api.openai.com/v1/threads/${currentThreadId}/runs/${runId}`,
-        { headers }
-      );
-      
-      status = statusRes.data.status;
-
-      // Handle function calls
-      if (status === "requires_action" && statusRes.data.required_action?.type === "submit_tool_outputs") {
-        const toolCalls = statusRes.data.required_action.submit_tool_outputs.tool_calls;
-        const toolOutputs = [];
-
-        for (const toolCall of toolCalls) {
-          if (toolCall.function.name === "web_search") {
-            try {
-              const args = JSON.parse(toolCall.function.arguments);
-              // Support flexible domain filtering
-              const searchResults = await searchWeb(
-                args.query, 
-                args.max_results || 3,
-                args.include_domains || []
-              );
-              
-              toolOutputs.push({
-                tool_call_id: toolCall.id,
-                output: JSON.stringify(searchResults)
-              });
-            } catch (error) {
-              console.error("Function call error:", error);
-              toolOutputs.push({
-                tool_call_id: toolCall.id,
-                output: JSON.stringify({ error: "Search function failed", results: [] })
-              });
-            }
-          }
-        }
-
-        // Submit tool outputs
-        await axios.post(
-          `https://api.openai.com/v1/threads/${currentThreadId}/runs/${runId}/submit_tool_outputs`,
-          { tool_outputs: toolOutputs },
-          { headers }
+            // Never leave a call unanswered
+            return { tool_call_id, output: JSON.stringify({ error: `Unknown tool: ${fn.name}` }) };
+          })
         );
+
+        // submit tool outputs
+        run = await client.beta.threads.runs.submitToolOutputs(run.id, {
+          thread_id: threadId,
+          tool_outputs, // [{ tool_call_id, output }]
+        });
+      } else {
+        await sleep(1000);
+        run = await client.beta.threads.runs.retrieve(run.id, {
+          thread_id: threadId,
+        });
       }
-
-      retries++;
     }
 
-    let reply = "No response received.";
-    if (status === "completed") {
-      const messagesRes = await axios.get<OpenAIMessagesResponse["data"]>(
-        `https://api.openai.com/v1/threads/${currentThreadId}/messages`,
-        { headers }
-      );
-      const assistantMsg = messagesRes.data.data.find((m: OpenAIMessage) => m.role === "assistant");
-      reply =
-        assistantMsg?.content?.[0]?.text?.value?.replace(/【\d+:\d+†[^】]+】/g, "") ||
-        "No valid response.";
-    } else if (status === "failed") {
-      reply = "I apologize, but I encountered an error while processing your request. Please try again.";
-    } else if (retries >= maxRetries) {
-      reply = "The response is taking longer than expected. Please try again or rephrase your question.";
-    }
-
-    return NextResponse.json({ reply, threadId: currentThreadId });
-  } catch (err: unknown) {
-    const error = err as {
-      response?: {
-        data?: {
-          error?: {
-            message?: string;
-          };
-        };
-      };
-      message?: string;
-    };
-    
-    console.error("Chat API error:", error);
+    const messages = await client.beta.threads.messages.list(threadId, { limit: 20 });
+    return NextResponse.json({ status: run.status, messages: messages.data });
+  } catch (err: any) {
+    console.error("Chat API error:", err);
     return NextResponse.json(
-      { error: error.response?.data?.error?.message || error.message || "Unknown error" },
-      { status: 500 }
+      { error: err?.response?.data ?? err?.message ?? "Unknown error" },
+      { status: 400 }
     );
   }
+}
+
+function safeParse(s: string | undefined) {
+  try {
+    return s ? JSON.parse(s) : {};
+  } catch {
+    return {};
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Minimal EY-first search used by the tool handler */
+async function doWebSearch(args: {
+  query?: string;
+  max_results?: number;
+  include_domains?: string[];
+}) {
+  const query = (args?.query ?? "").trim();
+  if (!query) return { error: "Missing query" };
+
+  const max_results = Math.min(Math.max(Number(args?.max_results ?? 3), 1), 10);
+  const include_domains =
+    Array.isArray(args?.include_domains) && args!.include_domains!.length > 0
+      ? args!.include_domains!
+      : ["ey.com"];
+
+  // Option A: call your internal proxy route (keeps API keys server-side)
+  // const resp = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/tools/web_search`, {
+  //   method: "POST",
+  //   headers: { "Content-Type": "application/json" },
+  //   body: JSON.stringify({ query, max_results, include_domains }),
+  // });
+  // return await resp.json();
+
+  // Option B: call Tavily directly
+  const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
+  if (!TAVILY_API_KEY) return { error: "Tavily API key not configured" };
+
+  const r = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Tavily-API-Key": TAVILY_API_KEY,
+    },
+    body: JSON.stringify({
+      query,
+      include_domains,
+      max_results,
+      search_depth: "advanced",
+      include_answer: false,
+      include_raw_content: false,
+    }),
+  });
+
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    return { error: `Tavily error: ${r.status} ${text}` };
+  }
+
+  const data = await r.json();
+  const results = Array.isArray(data?.results) ? data.results : [];
+  return {
+    query,
+    include_domains,
+    count: results.length,
+    results: results.slice(0, max_results).map((x: any) => ({
+      title: x.title ?? "",
+      url: x.url ?? "",
+      snippet: x.content ?? x.snippet ?? "",
+    })),
+  };
 }
