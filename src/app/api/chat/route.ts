@@ -1,6 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 
+interface ToolCall {
+  id: string;
+  type: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface RunStatus {
+  id: string;
+  status: string;
+  required_action?: {
+    submit_tool_outputs?: {
+      tool_calls: ToolCall[];
+    };
+  };
+}
+
+interface Message {
+  role: string;
+  content: Array<{
+    text?: {
+      value: string;
+    };
+  }>;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { input, threadId } = await req.json();
@@ -47,25 +75,23 @@ export async function POST(req: NextRequest) {
     const runId = runRes.data.id;
     let status = "in_progress";
     let retries = 0;
-    const maxRetries = 30; // Increased for tool calls
+    const maxRetries = 30;
 
     while ((status === "in_progress" || status === "queued") && retries < maxRetries) {
       await new Promise((res) => setTimeout(res, 2000));
       
-      const statusRes = await axios.get(
+      const statusRes = await axios.get<RunStatus>(
         `https://api.openai.com/v1/threads/${currentThreadId}/runs/${runId}`,
         { headers }
       );
       
       status = statusRes.data.status;
 
-      // Handle required actions (tool calls)
       if (status === "requires_action") {
         const toolCalls = statusRes.data.required_action?.submit_tool_outputs?.tool_calls || [];
         
         if (toolCalls.length > 0) {
-          // For now, submit empty/mock outputs to unblock
-          const toolOutputs = toolCalls.map((call: any) => ({
+          const toolOutputs = toolCalls.map((call: ToolCall) => ({
             tool_call_id: call.id,
             output: JSON.stringify({ error: "Tool not implemented yet" })
           }));
@@ -76,7 +102,7 @@ export async function POST(req: NextRequest) {
             { headers }
           );
           
-          status = "in_progress"; // Continue polling
+          status = "in_progress";
         }
       }
 
@@ -85,11 +111,11 @@ export async function POST(req: NextRequest) {
 
     let reply = "No response received.";
     if (status === "completed") {
-      const messagesRes = await axios.get(
+      const messagesRes = await axios.get<{ data: Message[] }>(
         `https://api.openai.com/v1/threads/${currentThreadId}/messages`,
         { headers }
       );
-      const assistantMsg = messagesRes.data.data.find((m: any) => m.role === "assistant");
+      const assistantMsg = messagesRes.data.data.find((m: Message) => m.role === "assistant");
       reply =
         assistantMsg?.content?.[0]?.text?.value?.replace(/【\d+:\d+†[^】]+】/g, "") ||
         "No valid response.";
@@ -98,10 +124,11 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ reply, threadId: currentThreadId });
-  } catch (err: any) {
-    console.error("Chat API error:", err.response?.data || err.message);
+  } catch (err) {
+    const error = err as { response?: { data?: { error?: { message?: string } } }; message?: string };
+    console.error("Chat API error:", error.response?.data || error.message);
     return NextResponse.json(
-      { error: err.response?.data?.error?.message || err.message || "Unknown error" },
+      { error: error.response?.data?.error?.message || error.message || "Unknown error" },
       { status: 500 }
     );
   }
