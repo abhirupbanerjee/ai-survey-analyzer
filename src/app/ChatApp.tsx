@@ -5,6 +5,7 @@ import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import { motion } from "framer-motion";
 import remarkGfm from "remark-gfm";
+import Image from "next/image";
 
 interface Message {
   role: string;
@@ -309,7 +310,14 @@ const ChatApp = () => {
       {/* Header */}
       <header className="relative flex items-center justify-center w-full p-3 sm:p-4 bg-white shadow-md">
         <div className="flex items-center">
-          <img src="/icon.png" alt="Icon" className="h-10 w-10 sm:h-16 sm:w-16" />
+          <Image 
+            src="/icon.png" 
+            alt="Icon" 
+            width={64} 
+            height={64} 
+            className="h-12 w-12 sm:h-16 sm:w-16"
+            priority
+          />
           <h2 className="text-sm sm:text-2xl font-bold ml-2">Caribbean AI Survey Assistant</h2>
         </div>
         {/* Sign out button - Icon on mobile, text on desktop */}
