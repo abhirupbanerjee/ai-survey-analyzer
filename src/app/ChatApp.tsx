@@ -334,7 +334,6 @@ const ChatApp = () => {
           <span className="hidden sm:inline text-gray-700 font-medium">Sign out</span>
         </button>
       </header>
-
       {/* Chat Container */}
       <div className="flex-grow w-full max-w-4xl mx-auto flex flex-col p-3 sm:p-4">
         <div
@@ -349,41 +348,82 @@ const ChatApp = () => {
             <div className="flex flex-col items-center justify-center h-full text-center px-4">
               <div className="text-xs sm:text-sm text-gray-600 mb-6 max-w-2xl leading-relaxed">
                 <p className="mb-3">
-                  This survey was conducted to capture the voices of Caribbean public and private sector leaders on artificial intelligence. Too often, global surveys overlook or dilute Caribbean perspectives.
-                  This initiative aims to change that — making sure our region&apos;s priorities, concerns, and aspirations are heard. The insights here represent what could become the landmark survey on AI for Caribbean leaders.
+                  This survey captures the voices of Caribbean public and private sector leaders on artificial intelligence. 
+                  Too often, global surveys overlook or dilute our region&apos;s perspectives. 
+                  This initiative aims to change that — ensuring the Caribbean&apos;s priorities, concerns, and aspirations are heard.
                 </p>
-                <p className="font-semibold text-gray-700 mb-4">Explore the findings below:</p>
+                <p className="mb-3">
+                  The insights here may become the{" "}
+                  <span className="font-semibold">landmark survey on AI for Caribbean leaders</span>.
+                </p>
+                <p className="font-semibold text-gray-700 mb-4">
+                  Explore the findings below:
+                </p>
               </div>
-              
-              <h4 className="text-sm sm:text-base font-semibold text-gray-700 mb-3">Suggested Prompts</h4>
+              <h4 className="text-sm sm:text-base font-semibold text-gray-700 mb-3">
+                Suggested Prompts
+              </h4>
               <div className="flex flex-col gap-3 w-full max-w-2xl">
+                {/* 1) General overview */}
                 <button
-                  onClick={() => setInput("What are the top survey findings overall?")}
+                  onClick={() =>
+                    setInput(
+                      "Give me an overall view of the Caribbean AI Survey. Start with a 2–3 sentence executive summary. Then show tables for: (1) AI preparedness, (2) top risks, and (3) key benefits across countries, industries, and leadership roles. For every score or rank, explain what it means in plain business language (e.g., 3.6/5 = moderately prepared). Include sample sizes (n) and flag low-n groups."
+                    )
+                  }
                   className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
                 >
-                  <div className="font-semibold mb-1">📊 What are the top survey findings overall?</div>
+                  <div className="font-semibold mb-1">🌎 What is the overall Caribbean perspective on AI adoption?</div>
                   <div className="text-gray-600 text-xs">
-                    See the most important themes and priorities emerging across all leaders.
+                    See top priorities, risks, and benefits across countries, industries, and leadership roles.
                   </div>
                 </button>
+                {/* 2) Trinidad — Financial Services */}
                 <button
-                  onClick={() => setInput("What are the biggest risks and concerns leaders see with AI?")}
+                  onClick={() =>
+                    setInput(
+                      "I am the CEO of a financial institution in Trinidad. Compare Trinidad Financial Services with (1) other Caribbean Financial Services institutions, and (2) EY global Financial Services benchmarks. Provide a 2–3 sentence executive summary. Then present three separate tables: 1) Preparedness (mean scores on 1–5 scale, with n and caution for low-n). Include one column for Trinidad, one for Caribbean peers, and one for EY global benchmarks. 2) Risks (ranked 1 = most serious). Show Trinidad vs Caribbean peers, and explain what the rank means (lower = more serious). 3) Benefits (ranked 1 = most important). Show Trinidad vs Caribbean peers, and explain what the rank means (lower = higher priority). Use plain business explanations for all scores/ranks (e.g., 3.6/5 = moderately prepared). Conclude with how Trinidad aligns or differs from Caribbean and global peers."
+                    )
+                  }
                   className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
                 >
-                  <div className="font-semibold mb-1">⚠️ What are the biggest risks and concerns leaders see with AI?</div>
+                  <div className="font-semibold mb-1">💼 Trinidad — Financial Services comparison</div>
                   <div className="text-gray-600 text-xs">
-                    Understand the challenges, risks, and areas of caution highlighted in the survey.
+                    Executive summary and AI survey insights
                   </div>
                 </button>
+
+                {/* 3) Jamaica — Manufacturing & Distribution */}
                 <button
-                  onClick={() => setInput("How do views differ by sector, country, or leadership role (CEO, CHRO, CTO, etc.)?")}
+                  onClick={() =>
+                    setInput(
+                      "I lead in Jamaica’s Manufacturing & Distribution sector. Compare Jamaica M&D with (1) M&D in other Caribbean countries, and (2) EY global benchmarks. Provide a 2–3 sentence executive summary. Then present three separate tables: 1) Preparedness (mean scores on 1–5 scale, with n and caution for low-n). Include one column for Jamaica, one for Caribbean peers, and one for EY global benchmarks. 2) Risks (ranked 1 = most serious). Show Jamaica vs Caribbean peers, and explain what the rank means (lower = more serious). 3) Benefits (ranked 1 = most important). Show Jamaica vs Caribbean peers, and explain what the rank means (lower = higher priority). Use plain business explanations for all scores/ranks. Conclude with how Jamaica aligns or differs from Caribbean and global peers."
+                    )
+                  }
                   className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
                 >
-                  <div className="font-semibold mb-1">🌍 How do views differ by sector, country, or leadership role?</div>
+                  <div className="font-semibold mb-1">🏭 Jamaica — Manufacturing &amp; Distribution comparison</div>
                   <div className="text-gray-600 text-xs">
-                    Explore differences in perspectives across industries, regions, and leadership positions.
+                    Executive summary and AI survey insights.
                   </div>
                 </button>
+                {/* Generic: Ask for Country & Sector, then compare */}
+                <button
+                  onClick={() =>
+                    setInput(
+                      "I want insights for my country and sector. First, ask me to choose a Country (e.g., Trinidad, Jamaica, Barbados, etc.) and a Sector/Industry (e.g., Financial Services, Manufacturing & Distribution, Government, Healthcare, etc.). After I provide both, generate the analysis as follows: Start with a 2–3 sentence executive summary. Then present three separate tables: 1) Preparedness (mean scores on a 1–5 scale, include sample size n and flag low-n). Columns: [My Segment], [Caribbean Peers in same sector], [EY Global benchmarks for that sector if requested]. 2) Risks (ranked, 1 = most serious): show [My Segment] vs [Caribbean Peers] and explain that lower rank = higher concern. 3) Benefits (ranked, 1 = most important): show [My Segment] vs [Caribbean Peers] and explain that lower rank = higher priority. For every score or rank, add a plain-language interpretation (e.g., 3.6/5 = moderately prepared). Conclude with how my segment aligns or differs from the Caribbean and (if requested) EY global benchmarks. Do not discuss files or formats; refer only to the Caribbean survey knowledgebase (and EY.com if asked)."
+                    )
+                  }
+                  className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
+                  aria-label="Custom insights by country and sector"
+                >
+                  <div className="font-semibold mb-1">🎯 Choose my Country & Sector</div>
+                  <div className="text-gray-600 text-xs">
+                    Assistant will ask for your country and sector, then deliver executive
+                    summary and AI survey insights.
+                  </div>
+                </button>
+
               </div>
             </div>
           ) : null}
