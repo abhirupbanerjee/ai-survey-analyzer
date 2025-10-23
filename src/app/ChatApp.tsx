@@ -378,52 +378,33 @@ const ChatApp = () => {
                     See top priorities, risks, and benefits across countries, industries, and leadership roles.
                   </div>
                 </button>
-                {/* 2) Trinidad — Financial Services */}
+                {/* General Prompt — Multi-country & Multi-sector */}
                 <button
                   onClick={() =>
                     setInput(
-                      "I am the CEO of a financial institution in Trinidad. Compare Trinidad Financial Services with (1) other Caribbean Financial Services institutions, and (2) EY global Financial Services benchmarks. Provide a 2–3 sentence executive summary. Then present three separate tables: 1) Preparedness (mean scores on 1–5 scale, with n and caution for low-n). Include one column for Trinidad, one for Caribbean peers, and one for EY global benchmarks. 2) Risks (ranked 1 = most serious). Show Trinidad vs Caribbean peers, and explain what the rank means (lower = more serious). 3) Benefits (ranked 1 = most important). Show Trinidad vs Caribbean peers, and explain what the rank means (lower = higher priority). Use plain business explanations for all scores/ranks (e.g., 3.6/5 = moderately prepared). Conclude with how Trinidad aligns or differs from Caribbean and global peers."
+                      "I want insights from the Caribbean AI Survey. Please first ask me to specify: " +
+                      "1) One or more countries (from: Antigua & Barbuda, Aruba, Barbados, Bonaire, Curacao, Dominican Republic, Grenada, Guyana, Jamaica, Netherlands, Saint Vincent & the Grenadines, Suriname, Trinidad & Tobago), " +
+                      "2) One or more sectors (from: Financial Services, Government, Healthcare, Hospitality, Manufacturing & Distribution, Non-profit, Oil & Gas, Other, State-Owned Enterprise, Technology/ICT), " +
+                      "3) An optional leadership role (CEO/Managing Director, CHRO/HR Lead, CIO/CTO, COO/Operations, Chairperson/Board Member, Director, or Other Executive). " +
+                      "After I provide these inputs: " +
+                      "- Start with a 2–3 sentence executive summary. " +
+                      "- Then provide three separate tables: " +
+                      "  1) Preparedness (mean scores on 1–5 scale, include n, flag low-n, and explain what each score means in plain terms). " +
+                      "  2) Risks (ranked, 1 = most serious; explain that lower rank = higher concern). " +
+                      "  3) Benefits (ranked, 1 = most important; explain that lower rank = higher priority). " +
+                      "- Compare my chosen segment(s) against Caribbean peers and, if requested, EY global benchmarks (from ey.com). " +
+                      "- Conclude with a plain-language summary of alignment and differences. " +
+                      "If I do not specify a role, provide insights at country + sector level only."
                     )
                   }
                   className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
+                  aria-label="Multi-country and multi-sector insights"
                 >
-                  <div className="font-semibold mb-1">💼 Trinidad — Financial Services comparison</div>
+                  <div className="font-semibold mb-1">🌍 Custom Insights by Country & Sector</div>
                   <div className="text-gray-600 text-xs">
-                    Executive summary and AI survey insights
+                    Select one or more countries and sectors (role optional). Compare against Caribbean peers and EY global benchmarks.
                   </div>
                 </button>
-
-                {/* 3) Jamaica — Manufacturing & Distribution */}
-                <button
-                  onClick={() =>
-                    setInput(
-                      "I lead in Jamaica’s Manufacturing & Distribution sector. Compare Jamaica M&D with (1) M&D in other Caribbean countries, and (2) EY global benchmarks. Provide a 2–3 sentence executive summary. Then present three separate tables: 1) Preparedness (mean scores on 1–5 scale, with n and caution for low-n). Include one column for Jamaica, one for Caribbean peers, and one for EY global benchmarks. 2) Risks (ranked 1 = most serious). Show Jamaica vs Caribbean peers, and explain what the rank means (lower = more serious). 3) Benefits (ranked 1 = most important). Show Jamaica vs Caribbean peers, and explain what the rank means (lower = higher priority). Use plain business explanations for all scores/ranks. Conclude with how Jamaica aligns or differs from Caribbean and global peers."
-                    )
-                  }
-                  className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
-                >
-                  <div className="font-semibold mb-1">🏭 Jamaica — Manufacturing &amp; Distribution comparison</div>
-                  <div className="text-gray-600 text-xs">
-                    Executive summary and AI survey insights.
-                  </div>
-                </button>
-                {/* Generic: Ask for Country & Sector, then compare */}
-                <button
-                  onClick={() =>
-                    setInput(
-                      "I want insights for my country and sector. First, ask me to choose a Country (e.g., Trinidad, Jamaica, Barbados, etc.) and a Sector/Industry (e.g., Financial Services, Manufacturing & Distribution, Government, Healthcare, etc.). After I provide both, generate the analysis as follows: Start with a 2–3 sentence executive summary. Then present three separate tables: 1) Preparedness (mean scores on a 1–5 scale, include sample size n and flag low-n). Columns: [My Segment], [Caribbean Peers in same sector], [EY Global benchmarks for that sector if requested]. 2) Risks (ranked, 1 = most serious): show [My Segment] vs [Caribbean Peers] and explain that lower rank = higher concern. 3) Benefits (ranked, 1 = most important): show [My Segment] vs [Caribbean Peers] and explain that lower rank = higher priority. For every score or rank, add a plain-language interpretation (e.g., 3.6/5 = moderately prepared). Conclude with how my segment aligns or differs from the Caribbean and (if requested) EY global benchmarks. Do not discuss files or formats; refer only to the Caribbean survey knowledgebase (and EY.com if asked)."
-                    )
-                  }
-                  className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
-                  aria-label="Custom insights by country and sector"
-                >
-                  <div className="font-semibold mb-1">🎯 Choose my Country & Sector</div>
-                  <div className="text-gray-600 text-xs">
-                    Assistant will ask for your country and sector, then deliver executive
-                    summary and AI survey insights.
-                  </div>
-                </button>
-
               </div>
             </div>
           ) : null}
