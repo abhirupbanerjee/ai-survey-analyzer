@@ -13,6 +13,12 @@ interface Message {
   timestamp?: string;
 }
 
+// Prompt templates for cleaner code and better maintainability
+const PROMPT_TEMPLATES = {
+  OVERVIEW: "Give me an overall view of the Caribbean AI Survey results.",
+  CUSTOM_INSIGHTS: "I want custom insights by country and sector from the Caribbean AI Survey.",
+} as const;
+
 const ChatApp = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -367,9 +373,7 @@ const ChatApp = () => {
                 {/* 1) General overview */}
                 <button
                   onClick={() =>
-                    setInput(
-                      "Give me an overall view of the Caribbean AI Survey. Start with a 2–3 sentence executive summary. Then show tables for: (1) AI preparedness, (2) top risks, and (3) key benefits across countries, industries, and leadership roles. For every score or rank, explain what it means in plain business language (e.g., 3.6/5 = moderately prepared). Include sample sizes (n) and flag low-n groups."
-                    )
+                    setInput(PROMPT_TEMPLATES.OVERVIEW)
                   }
                   className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
                 >
@@ -381,21 +385,7 @@ const ChatApp = () => {
                 {/* General Prompt — Multi-country & Multi-sector */}
                 <button
                   onClick={() =>
-                    setInput(
-                      "I want insights from the Caribbean AI Survey. Please first ask me to specify: " +
-                      "1) One or more countries (from: Antigua & Barbuda, Aruba, Barbados, Bonaire, Curacao, Dominican Republic, Grenada, Guyana, Jamaica, Netherlands, Saint Vincent & the Grenadines, Suriname, Trinidad & Tobago), " +
-                      "2) One or more sectors (from: Financial Services, Government, Healthcare, Hospitality, Manufacturing & Distribution, Non-profit, Oil & Gas, Other, State-Owned Enterprise, Technology/ICT), " +
-                      "3) An optional leadership role (CEO/Managing Director, CHRO/HR Lead, CIO/CTO, COO/Operations, Chairperson/Board Member, Director, or Other Executive). " +
-                      "After I provide these inputs: " +
-                      "- Start with a 2–3 sentence executive summary. " +
-                      "- Then provide three separate tables: " +
-                      "  1) Preparedness (mean scores on 1–5 scale, include n, flag low-n, and explain what each score means in plain terms). " +
-                      "  2) Risks (ranked, 1 = most serious; explain that lower rank = higher concern). " +
-                      "  3) Benefits (ranked, 1 = most important; explain that lower rank = higher priority). " +
-                      "- Compare my chosen segment(s) against Caribbean peers and, if requested, EY global benchmarks (from ey.com). " +
-                      "- Conclude with a plain-language summary of alignment and differences. " +
-                      "If I do not specify a role, provide insights at country + sector level only."
-                    )
+                    setInput(PROMPT_TEMPLATES.CUSTOM_INSIGHTS)
                   }
                   className="p-3 sm:p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-left text-xs sm:text-sm transition-colors"
                   aria-label="Multi-country and multi-sector insights"
