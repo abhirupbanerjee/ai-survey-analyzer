@@ -188,13 +188,16 @@ export async function POST(req: NextRequest) {
         console.error("❌ Failed to cancel run:", cancelError instanceof Error ? cancelError.message : "Unknown error");
       }
       
-      return NextResponse.json(
+      // Don't cache timeout errors
+      const timeoutResponse = NextResponse.json(
         { 
           error: "Request timeout. The assistant is taking longer than expected. Please try again.",
           threadId: currentThreadId 
         },
         { status: 504 }
       );
+      timeoutResponse.headers.set('Cache-Control', 'no-cache');
+      return timeoutResponse;
     }
 
     // Get final response
@@ -221,14 +224,29 @@ export async function POST(req: NextRequest) {
       reply = "Unexpected error occurred. Please try again.";
     }
 
-    return NextResponse.json({ reply, threadId: currentThreadId });
+    // 🚀 ADD EDGE CACHING FOR SUCCESSFUL RESPONSES
+    const response = NextResponse.json({ reply, threadId: currentThreadId });
+    
+    // Cache successful responses for 2 minutes (Caribbean AI Survey insights don't change frequently)
+    if (status === "completed") {
+      response.headers.set('Cache-Control', 's-maxage=120, stale-while-revalidate=300');
+    } else {
+      // Don't cache error responses
+      response.headers.set('Cache-Control', 'no-cache');
+    }
+    
+    return response;
     
   } catch (err) {
     const error = err as { response?: { data?: { error?: { message?: string } } }; message?: string };
     console.error("💥 Chat API error:", error);
-    return NextResponse.json(
+    
+    // Don't cache error responses
+    const errorResponse = NextResponse.json(
       { error: error.response?.data?.error?.message || error.message || "Unknown error" },
       { status: 500 }
     );
+    errorResponse.headers.set('Cache-Control', 'no-cache');
+    return errorResponse;
   }
 }
